@@ -1,98 +1,205 @@
-import { Image } from 'expo-image';
-import { Platform, StyleSheet } from 'react-native';
+import { CameraView, useCameraPermissions } from "expo-camera";
+import React, { useEffect, useRef, useState } from "react";
+import {
+  ActivityIndicator,
+  Image,
+  SafeAreaView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 
-import { HelloWave } from '@/components/hello-wave';
-import ParallaxScrollView from '@/components/parallax-scroll-view';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Link } from 'expo-router';
+// ZMIEŃ TO NA SWOJE IP (z komendy ipconfig)
+const IP_ADDRESS = "192.168.1.236";
 
 export default function HomeScreen() {
-  return (
-    <ParallaxScrollView
-      headerBackgroundColor={{ light: '#A1CEDC', dark: '#1D3D47' }}
-      headerImage={
-        <Image
-          source={require('@/assets/images/partial-react-logo.png')}
-          style={styles.reactLogo}
-        />
-      }>
-      <ThemedView style={styles.titleContainer}>
-        <ThemedText type="title">Welcome!</ThemedText>
-        <HelloWave />
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 1: Try it</ThemedText>
-        <ThemedText>
-          Edit <ThemedText type="defaultSemiBold">app/(tabs)/index.tsx</ThemedText> to see changes.
-          Press{' '}
-          <ThemedText type="defaultSemiBold">
-            {Platform.select({
-              ios: 'cmd + d',
-              android: 'cmd + m',
-              web: 'F12',
-            })}
-          </ThemedText>{' '}
-          to open developer tools.
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <Link href="/modal">
-          <Link.Trigger>
-            <ThemedText type="subtitle">Step 2: Explore</ThemedText>
-          </Link.Trigger>
-          <Link.Preview />
-          <Link.Menu>
-            <Link.MenuAction title="Action" icon="cube" onPress={() => alert('Action pressed')} />
-            <Link.MenuAction
-              title="Share"
-              icon="square.and.arrow.up"
-              onPress={() => alert('Share pressed')}
-            />
-            <Link.Menu title="More" icon="ellipsis">
-              <Link.MenuAction
-                title="Delete"
-                icon="trash"
-                destructive
-                onPress={() => alert('Delete pressed')}
-              />
-            </Link.Menu>
-          </Link.Menu>
-        </Link>
+  const [permission, requestPermission] = useCameraPermissions();
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState("");
+  const cameraRef = useRef<CameraView>(null);
 
-        <ThemedText>
-          {`Tap the Explore tab to learn more about what's included in this starter app.`}
-        </ThemedText>
-      </ThemedView>
-      <ThemedView style={styles.stepContainer}>
-        <ThemedText type="subtitle">Step 3: Get a fresh start</ThemedText>
-        <ThemedText>
-          {`When you're ready, run `}
-          <ThemedText type="defaultSemiBold">npm run reset-project</ThemedText> to get a fresh{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> directory. This will move the current{' '}
-          <ThemedText type="defaultSemiBold">app</ThemedText> to{' '}
-          <ThemedText type="defaultSemiBold">app-example</ThemedText>.
-        </ThemedText>
-      </ThemedView>
-    </ParallaxScrollView>
+  // Automatyczna prośba o uprawnienia przy starcie
+  useEffect(() => {
+    if (permission && !permission.granted && permission.canAskAgain) {
+      requestPermission();
+    }
+  }, [permission]);
+
+  // 1. Stan ładowania uprawnień
+  if (!permission) {
+    return (
+      <View style={styles.center}>
+        <ActivityIndicator size="large" />
+      </View>
+    );
+  }
+
+  // 2. Obsługa braku uprawnień (z przyciskiem wymuszającym)
+  if (!permission.granted) {
+    return (
+      <View style={styles.container}>
+        <View style={styles.center}>
+          <Text style={styles.errorText}>
+            Aplikacja nie ma dostępu do aparatu.
+          </Text>
+          <Text style={styles.subErrorText}>
+            Nawet jeśli nadałeś je w systemie, musisz potwierdzić je tutaj:
+          </Text>
+          <TouchableOpacity
+            style={styles.permissionButton}
+            onPress={requestPermission}
+          >
+            <Text style={styles.buttonText}>ODBLOKUJ APARAT</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  const takePhoto = async () => {
+    if (cameraRef.current) {
+      try {
+        const options = { quality: 0.5, base64: true };
+        const data = await cameraRef.current.takePictureAsync(options);
+        if (data && data.uri) {
+          setPhoto(data.uri);
+          if (data.base64) {
+            analyzeImage(data.base64);
+          }
+        }
+      } catch (err) {
+        setResult("Błąd przy robieniu zdjęcia: " + err);
+      }
+    }
+  };
+
+  const analyzeImage = async (base64Image: string) => {
+    setLoading(true);
+    setResult("Gemma 4 analizuje Twój posiłek...");
+    try {
+      const res = await fetch(`http://${IP_ADDRESS}:11434/api/generate`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          model: "gemma4:e2b",
+          prompt:
+            "Identify the food in this image and estimate its total calories. Respond in Polish.",
+          images: [base64Image],
+          stream: false,
+        }),
+      });
+      const data = await res.json();
+      setResult(data.response);
+    } catch (error: any) {
+      setResult("Błąd połączenia z laptopem: " + error.message);
+    }
+    setLoading(false);
+  };
+
+  return (
+    <SafeAreaView style={styles.container}>
+      <View style={styles.header}>
+        <Text style={styles.title}>🥗NiceToFitYou - Photo Calculator</Text>
+      </View>
+
+      <View style={styles.cameraContainer}>
+        {!photo ? (
+          <CameraView style={styles.camera} ref={cameraRef} facing="back" />
+        ) : (
+          <Image source={{ uri: photo }} style={styles.camera} />
+        )}
+      </View>
+
+      <View style={styles.resultArea}>
+        {loading && (
+          <ActivityIndicator
+            size="small"
+            color="#2ecc71"
+            style={{ marginBottom: 10 }}
+          />
+        )}
+        <Text style={styles.resultText}>
+          {result || "Skieruj aparat na jedzenie"}
+        </Text>
+      </View>
+
+      <View style={styles.footer}>
+        <TouchableOpacity
+          style={[
+            styles.mainButton,
+            { backgroundColor: photo ? "#e74c3c" : "#2ecc71" },
+          ]}
+          onPress={
+            photo
+              ? () => {
+                  setPhoto(null);
+                  setResult("");
+                }
+              : takePhoto
+          }
+        >
+          <Text style={styles.buttonText}>
+            {photo ? "USUŃ I PONÓW" : "SKANUJ I LICZ KALORIE"}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  titleContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+  container: { flex: 1, backgroundColor: "#fdfdfd" },
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 20,
   },
-  stepContainer: {
-    gap: 8,
-    marginBottom: 8,
+  header: {
+    paddingTop: 50,
+    paddingBottom: 10,
+    alignItems: "center",
+    backgroundColor: "#fff",
   },
-  reactLogo: {
-    height: 178,
-    width: 290,
-    bottom: 0,
-    left: 0,
-    position: 'absolute',
+  title: { fontSize: 22, fontWeight: "bold", color: "#2c3e50" },
+  cameraContainer: {
+    flex: 2,
+    margin: 15,
+    borderRadius: 25,
+    overflow: "hidden",
+    backgroundColor: "#000",
+    elevation: 5,
   },
+  camera: { flex: 1 },
+  resultArea: {
+    flex: 1,
+    padding: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  resultText: {
+    fontSize: 16,
+    color: "#34495e",
+    textAlign: "center",
+    lineHeight: 22,
+  },
+  footer: { paddingBottom: 30 },
+  mainButton: {
+    marginHorizontal: 30,
+    padding: 18,
+    borderRadius: 15,
+    alignItems: "center",
+    elevation: 3,
+  },
+  permissionButton: {
+    backgroundColor: "#3498db",
+    padding: 15,
+    borderRadius: 10,
+    marginTop: 20,
+  },
+  buttonText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
+  errorText: { fontSize: 18, fontWeight: "bold", color: "#e74c3c" },
+  subErrorText: { textAlign: "center", color: "#7f8c8d", marginTop: 10 },
 });

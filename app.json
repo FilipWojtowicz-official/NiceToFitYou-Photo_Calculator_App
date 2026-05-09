@@ -1,11 +1,11 @@
 {
   "expo": {
-    "name": "GemmaCalorieApp",
-    "slug": "GemmaCalorieApp",
+    "name": "NiceToFitYou-Photo_Calculator_App",
+    "slug": "NiceToFitYou-Photo_Calculator_App",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "gemmacalorieapp",
+    "scheme": "nicefitoyou-photo-calculator-app",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -19,7 +19,8 @@
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.filipwojtowiczofficial.NiceToFitYouPhoto_Calculator_App"
     },
     "web": {
       "output": "static",
@@ -43,6 +44,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "1fb303a9-2fcb-4886-bd8c-fef6fb1aed17"
+      }
     }
   }
 }
