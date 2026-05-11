@@ -1,3 +1,4 @@
+import AsyncStorage from "@react-native-async-storage/async-storage";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -6,12 +7,10 @@ import {
   SafeAreaView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-
-// ZMIEŃ TO NA SWOJE IP (z komendy ipconfig)
-const IP_ADDRESS = "192.168.1.236";
 
 export default function HomeScreen() {
   const [permission, requestPermission] = useCameraPermissions();
@@ -20,33 +19,43 @@ export default function HomeScreen() {
   const [result, setResult] = useState("");
   const cameraRef = useRef<CameraView>(null);
 
-  // Automatyczna prośba o uprawnienia przy starcie
+  // Stan przechowujący adres IP
+  const [apiUrl, setApiUrl] = useState("http://192.168.1.236:11434");
+
+  // Ładowanie zapisanego IP przy starcie
+  useEffect(() => {
+    const loadIp = async () => {
+      const savedIp = await AsyncStorage.getItem("user_server_ip");
+      if (savedIp) setApiUrl(savedIp);
+    };
+    loadIp();
+  }, []);
+
+  // Funkcja zapisu IP przy każdej zmianie tekstu
+  const saveIp = async (text: string) => {
+    setApiUrl(text);
+    await AsyncStorage.setItem("user_server_ip", text);
+  };
+
   useEffect(() => {
     if (permission && !permission.granted && permission.canAskAgain) {
       requestPermission();
     }
   }, [permission]);
 
-  // 1. Stan ładowania uprawnień
   if (!permission) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator size="large" />
+        <ActivityIndicator size="large" color="#2ecc71" />
       </View>
     );
   }
 
-  // 2. Obsługa braku uprawnień (z przyciskiem wymuszającym)
   if (!permission.granted) {
     return (
       <View style={styles.container}>
         <View style={styles.center}>
-          <Text style={styles.errorText}>
-            Aplikacja nie ma dostępu do aparatu.
-          </Text>
-          <Text style={styles.subErrorText}>
-            Nawet jeśli nadałeś je w systemie, musisz potwierdzić je tutaj:
-          </Text>
+          <Text style={styles.errorText}>Brak dostępu do aparatu.</Text>
           <TouchableOpacity
             style={styles.permissionButton}
             onPress={requestPermission}
@@ -70,16 +79,16 @@ export default function HomeScreen() {
           }
         }
       } catch (err) {
-        setResult("Błąd przy robieniu zdjęcia: " + err);
+        setResult("Błąd: " + err);
       }
     }
   };
 
   const analyzeImage = async (base64Image: string) => {
     setLoading(true);
-    setResult("Gemma 4 analizuje Twój posiłek...");
+    setResult("Gemma analizuje posiłek...");
     try {
-      const res = await fetch(`http://${IP_ADDRESS}:11434/api/generate`, {
+      const res = await fetch(`${apiUrl}/api/generate`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -93,15 +102,29 @@ export default function HomeScreen() {
       const data = await res.json();
       setResult(data.response);
     } catch (error: any) {
-      setResult("Błąd połączenia z laptopem: " + error.message);
+      setResult(
+        `Błąd połączenia z: ${apiUrl}\n\nUpewnij się, że laptop i telefon są w jednej sieci (Hotspot) i wpisałeś dobre IP.`,
+      );
     }
     setLoading(false);
   };
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Nowy Nagłówek z polem tekstowym na IP */}
       <View style={styles.header}>
-        <Text style={styles.title}>🥗NiceToFitYou - Photo Calculator</Text>
+        <View style={{ width: "100%" }}>
+          <Text style={styles.title}>🥗 NiceToFitYou</Text>
+          <Text style={styles.ipLabel}>Adres serwera AI:</Text>
+          <TextInput
+            style={styles.ipInput}
+            value={apiUrl}
+            onChangeText={saveIp}
+            placeholder="http://192.168.43.10:11434"
+            autoCapitalize="none"
+            autoCorrect={false}
+          />
+        </View>
       </View>
 
       <View style={styles.cameraContainer}>
@@ -158,12 +181,35 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   header: {
-    paddingTop: 50,
-    paddingBottom: 10,
-    alignItems: "center",
+    paddingTop: 60,
+    paddingBottom: 15,
+    paddingHorizontal: 25,
     backgroundColor: "#fff",
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f2f6",
   },
-  title: { fontSize: 22, fontWeight: "bold", color: "#2c3e50" },
+  title: {
+    fontSize: 22,
+    fontWeight: "bold",
+    color: "#2c3e50",
+    marginBottom: 10,
+  },
+  ipLabel: {
+    fontSize: 10,
+    color: "#95a5a6",
+    fontWeight: "bold",
+    textTransform: "uppercase",
+  },
+  ipInput: {
+    backgroundColor: "#f1f2f6",
+    padding: 8,
+    borderRadius: 8,
+    fontSize: 14,
+    color: "#27ae60",
+    marginTop: 4,
+    borderWidth: 1,
+    borderColor: "#dcdde1",
+  },
   cameraContainer: {
     flex: 2,
     margin: 15,
@@ -180,10 +226,10 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   resultText: {
-    fontSize: 16,
+    fontSize: 15,
     color: "#34495e",
     textAlign: "center",
-    lineHeight: 22,
+    lineHeight: 20,
   },
   footer: { paddingBottom: 30 },
   mainButton: {
@@ -201,5 +247,4 @@ const styles = StyleSheet.create({
   },
   buttonText: { color: "#fff", fontSize: 16, fontWeight: "bold" },
   errorText: { fontSize: 18, fontWeight: "bold", color: "#e74c3c" },
-  subErrorText: { textAlign: "center", color: "#7f8c8d", marginTop: 10 },
 });
